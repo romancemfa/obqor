@@ -1,0 +1,16 @@
+قائمة التنفيذ دون AWS
+
+[ ] فك ضغط المشروع
+[ ] إنشاء مستودع GitHub ورفع محتويات المشروع
+[ ] إنشاء Skill في Alexa Developer Console باللغة ar-SA
+[ ] استيراد alexa-skill-model/ar-SA.json وبناء النموذج
+[ ] نسخ Skill ID
+[ ] إنشاء مفتاح Gemini
+[ ] استيراد مستودع GitHub إلى Vercel
+[ ] إضافة ALEXA_SKILL_ID وGEMINI_API_KEY وبقية المتغيرات
+[ ] نشر المشروع
+[ ] اختبار رابط /health
+[ ] وضع https://project.vercel.app/alexa في Alexa Endpoint
+[ ] اختيار شهادة wildcard لنطاق vercel.app
+[ ] تفعيل Development Testing
+[ ] اختبار: أليكسا، افتح عبقور الذكي
