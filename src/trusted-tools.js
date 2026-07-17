@@ -3,6 +3,171 @@
 const GEOCODING_ENDPOINT = 'https://geocoding-api.open-meteo.com/v1/search';
 const FORECAST_ENDPOINT = 'https://api.open-meteo.com/v1/forecast';
 
+/**
+ * أسماء بديلة للمدن العربية.
+ *
+ * المفاتيح مكتوبة بعد تطبيق normalizeArabic:
+ * - ة تتحول إلى ه
+ * - أ، إ، آ تتحول إلى ا
+ *
+ * query:
+ * الاسم الذي يرسل إلى Geocoding API.
+ *
+ * displayName:
+ * الاسم العربي الذي يقال للمستخدم.
+ */
+const LOCATION_ALIASES = {
+  'المدينه المنوره': {
+    query: 'Medina',
+    countryCode: 'SA',
+    displayName: 'المدينة المنورة',
+  },
+
+  'مدينه المنوره': {
+    query: 'Medina',
+    countryCode: 'SA',
+    displayName: 'المدينة المنورة',
+  },
+
+  'المدينه': {
+    query: 'Medina',
+    countryCode: 'SA',
+    displayName: 'المدينة المنورة',
+  },
+
+  'مكه المكرمه': {
+    query: 'Mecca',
+    countryCode: 'SA',
+    displayName: 'مكة المكرمة',
+  },
+
+  'مكه': {
+    query: 'Mecca',
+    countryCode: 'SA',
+    displayName: 'مكة المكرمة',
+  },
+
+  'جده': {
+    query: 'Jeddah',
+    countryCode: 'SA',
+    displayName: 'جدة',
+  },
+
+  'الرياض': {
+    query: 'Riyadh',
+    countryCode: 'SA',
+    displayName: 'الرياض',
+  },
+
+  'الدمام': {
+    query: 'Dammam',
+    countryCode: 'SA',
+    displayName: 'الدمام',
+  },
+
+  'الخبر': {
+    query: 'Khobar',
+    countryCode: 'SA',
+    displayName: 'الخبر',
+  },
+
+  'الطائف': {
+    query: 'Taif',
+    countryCode: 'SA',
+    displayName: 'الطائف',
+  },
+
+  'تبوك': {
+    query: 'Tabuk',
+    countryCode: 'SA',
+    displayName: 'تبوك',
+  },
+
+  'ابها': {
+    query: 'Abha',
+    countryCode: 'SA',
+    displayName: 'أبها',
+  },
+
+  'خميس مشيط': {
+    query: 'Khamis Mushait',
+    countryCode: 'SA',
+    displayName: 'خميس مشيط',
+  },
+
+  'ينبع': {
+    query: 'Yanbu',
+    countryCode: 'SA',
+    displayName: 'ينبع',
+  },
+
+  'العلا': {
+    query: 'Al Ula',
+    countryCode: 'SA',
+    displayName: 'العلا',
+  },
+
+  'حائل': {
+    query: 'Hail',
+    countryCode: 'SA',
+    displayName: 'حائل',
+  },
+
+  'القصيم': {
+    query: 'Buraydah',
+    countryCode: 'SA',
+    displayName: 'القصيم',
+  },
+
+  'بريده': {
+    query: 'Buraydah',
+    countryCode: 'SA',
+    displayName: 'بريدة',
+  },
+
+  'نجران': {
+    query: 'Najran',
+    countryCode: 'SA',
+    displayName: 'نجران',
+  },
+
+  'جازان': {
+    query: 'Jazan',
+    countryCode: 'SA',
+    displayName: 'جازان',
+  },
+
+  'لندن': {
+    query: 'London',
+    countryCode: 'GB',
+    displayName: 'لندن',
+  },
+
+  'باريس': {
+    query: 'Paris',
+    countryCode: 'FR',
+    displayName: 'باريس',
+  },
+
+  'القاهره': {
+    query: 'Cairo',
+    countryCode: 'EG',
+    displayName: 'القاهرة',
+  },
+
+  'دبي': {
+    query: 'Dubai',
+    countryCode: 'AE',
+    displayName: 'دبي',
+  },
+
+  'اسطنبول': {
+    query: 'Istanbul',
+    countryCode: 'TR',
+    displayName: 'إسطنبول',
+  },
+};
+
 function normalizeArabic(value) {
   return String(value || '')
     .replace(/[إأآٱ]/g, 'ا')
@@ -121,36 +286,171 @@ async function fetchJson(url, timeoutMs) {
   }
 }
 
+/**
+ * تحويل اسم الموقع إلى إحداثيات ومنطقة زمنية.
+ *
+ * ترتيب البحث:
+ * 1. الاسم الإنجليزي الموثوق من LOCATION_ALIASES.
+ * 2. الاسم الذي قاله المستخدم كما هو.
+ *
+ * نرسل countryCode إلى Open-Meteo عندما يكون معروفاً،
+ * بدلاً من محاولة تصفية النتائج بعد عودتها فقط.
+ */
 async function geocodeLocation(location, config) {
-  const params = new URLSearchParams({
-    name: location,
-    count: '5',
-    language: 'ar',
-    format: 'json',
-  });
+  const originalLocation = String(location || '').trim();
 
-  const data = await fetchJson(
-    `${GEOCODING_ENDPOINT}?${params.toString()}`,
-    config.liveDataTimeoutMs,
-  );
-
-  const results = Array.isArray(data?.results) ? data.results : [];
-  if (!results.length) {
-    throw new Error(`لم يتم العثور على الموقع: ${location}`);
+  if (!originalLocation) {
+    throw new Error('لم يتم تحديد اسم الموقع');
   }
 
-  const preferredCountry = normalizeArabic(config.defaultCountryCode) === 'sa'
-    ? results.find(item => item?.country_code === 'SA')
+  const normalizedLocation = normalizeArabic(originalLocation);
+  const alias = LOCATION_ALIASES[normalizedLocation] || null;
+
+  const configuredCountryCode = String(
+    config.defaultCountryCode || '',
+  )
+    .trim()
+    .toUpperCase();
+
+  const countryCode =
+    alias?.countryCode
+    || (
+      /^[A-Z]{2}$/.test(configuredCountryCode)
+        ? configuredCountryCode
+        : ''
+    );
+
+  /**
+   * نبني أكثر من محاولة بحث.
+   * الاسم البديل الإنجليزي يأتي أولاً لأنه أكثر ثباتاً
+   * في قواعد بيانات أسماء المواقع.
+   */
+  const searchNames = [];
+
+  if (alias?.query) {
+    searchNames.push(alias.query);
+  }
+
+  searchNames.push(originalLocation);
+
+  /**
+   * إزالة التكرار مع الحفاظ على ترتيب المحاولات.
+   */
+  const uniqueSearchNames = [
+    ...new Set(
+      searchNames
+        .map(item => String(item || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+
+  let results = [];
+  let successfulSearchName = '';
+
+  for (const searchName of uniqueSearchNames) {
+    const params = new URLSearchParams({
+      name: searchName,
+      count: '10',
+      language: 'ar',
+      format: 'json',
+    });
+
+    /**
+     * معامل رسمي في Open-Meteo لتقييد البحث بالدولة.
+     */
+    if (countryCode) {
+      params.set('countryCode', countryCode);
+    }
+
+    const data = await fetchJson(
+      `${GEOCODING_ENDPOINT}?${params.toString()}`,
+      config.liveDataTimeoutMs,
+    );
+
+    const attemptResults = Array.isArray(data?.results)
+      ? data.results
+      : [];
+
+    if (attemptResults.length > 0) {
+      results = attemptResults;
+      successfulSearchName = searchName;
+      break;
+    }
+  }
+
+  if (!results.length) {
+    console.error(
+      'Geocoding returned no results',
+      {
+        originalLocation,
+        normalizedLocation,
+        attemptedNames: uniqueSearchNames,
+        countryCode,
+      },
+    );
+
+    throw new Error(
+      `لم يتم العثور على الموقع: ${originalLocation}`,
+    );
+  }
+
+  /**
+   * نفضل نتيجة الدولة المطلوبة.
+   */
+  const preferredCountryResult = countryCode
+    ? results.find(
+      item =>
+        String(item?.country_code || '').toUpperCase()
+        === countryCode,
+    )
     : null;
 
-  const place = preferredCountry || results[0];
+  const place = preferredCountryResult || results[0];
+
+  const latitude = Number(place?.latitude);
+  const longitude = Number(place?.longitude);
+
+  if (
+    !Number.isFinite(latitude)
+    || !Number.isFinite(longitude)
+  ) {
+    throw new Error(
+      `إحداثيات الموقع غير صالحة: ${originalLocation}`,
+    );
+  }
+
+  const timezone = String(
+    place?.timezone
+    || config.defaultTimeZone
+    || 'Asia/Riyadh',
+  ).trim();
+
+  const displayName = String(
+    alias?.displayName
+    || place?.name
+    || originalLocation,
+  ).trim();
+
+  console.log(
+    'Geocoding location resolved',
+    {
+      originalLocation,
+      successfulSearchName,
+      displayName,
+      countryCode: place?.country_code || countryCode,
+      timezone,
+    },
+  );
 
   return {
-    name: String(place.name || location),
-    country: String(place.country || ''),
-    latitude: Number(place.latitude),
-    longitude: Number(place.longitude),
-    timezone: String(place.timezone || config.defaultTimeZone),
+    name: displayName,
+    country: String(place?.country || ''),
+    countryCode: String(
+      place?.country_code || countryCode,
+    ),
+    latitude,
+    longitude,
+    timezone,
   };
 }
 
