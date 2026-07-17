@@ -1,8 +1,18 @@
 'use strict';
 
+const { answerWithTrustedTools } = require('./trusted-tools');
+
 const DEFAULT_MODEL = 'gemini-3.1-flash-lite';
 const DEFAULT_TIMEOUT_MS = 6200;
 const DEFAULT_MAX_SPEECH_CHARS = 850;
+const DEFAULT_LIVE_DATA_TIMEOUT_MS = 5000;
+
+function parseBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+  return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+}
 
 function getConfig() {
   return {
@@ -11,8 +21,23 @@ function getConfig() {
     agentName: String(process.env.AGENT_NAME || 'عبقور').trim(),
     agentContext: String(process.env.AGENT_CONTEXT || '').trim(),
     timeZone: String(process.env.TIME_ZONE || 'Asia/Riyadh').trim(),
+    defaultTimeZone: String(
+      process.env.DEFAULT_TIME_ZONE || process.env.TIME_ZONE || 'Asia/Riyadh',
+    ).trim(),
+    defaultLocation: String(process.env.DEFAULT_LOCATION || 'المدينة المنورة').trim(),
+    defaultCountryCode: String(process.env.DEFAULT_COUNTRY_CODE || 'SA').trim(),
+    requireCurrentDataVerification: parseBoolean(
+      process.env.REQUIRE_CURRENT_DATA_VERIFICATION,
+      true,
+    ),
+    speakSources: parseBoolean(process.env.SPEAK_SOURCES, false),
     timeoutMs: Number(process.env.GEMINI_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
-    maxSpeechChars: Number(process.env.MAX_SPEECH_CHARS || DEFAULT_MAX_SPEECH_CHARS),
+    liveDataTimeoutMs: Number(
+      process.env.LIVE_DATA_TIMEOUT_MS || DEFAULT_LIVE_DATA_TIMEOUT_MS,
+    ),
+    maxSpeechChars: Number(
+      process.env.MAX_SPEECH_CHARS || DEFAULT_MAX_SPEECH_CHARS,
+    ),
   };
 }
 
@@ -38,9 +63,15 @@ function cleanForSpeech(value, maxChars = DEFAULT_MAX_SPEECH_CHARS) {
 }
 
 function localToolAnswer(query, timeZone = 'Asia/Riyadh') {
-  const normalized = String(query || '').replace(/[؟?]/g, '').trim();
+  const normalized = String(query || '')
+    .replace(/[إأآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/[ًٌٍَُِّْـ]/g, '')
+    .replace(/[؟?]/g, '')
+    .trim();
 
-  if (/(كم الساعة|الوقت الآن|ما الوقت|الساعة الآن)/.test(normalized)) {
+  if (/(كم الساعه|الوقت الان|ما الوقت|الساعه الان)/.test(normalized)) {
     return new Intl.DateTimeFormat('ar-SA', {
       timeZone,
       hour: 'numeric',
@@ -48,7 +79,7 @@ function localToolAnswer(query, timeZone = 'Asia/Riyadh') {
     }).format(new Date());
   }
 
-  if (/(ما التاريخ|تاريخ اليوم|ما هو اليوم|أي يوم اليوم)/.test(normalized)) {
+  if (/(ما التاريخ|تاريخ اليوم|ما هو اليوم|اي يوم اليوم)/.test(normalized)) {
     return new Intl.DateTimeFormat('ar-SA', {
       timeZone,
       weekday: 'long',
@@ -64,14 +95,26 @@ function localToolAnswer(query, timeZone = 'Asia/Riyadh') {
 function buildSystemPrompt(config, channel) {
   const channelRules = channel === 'whatsapp'
     ? 'اجعل الإجابة مناسبة لرسالة واتساب قصيرة، ويمكن استخدام أسطر بسيطة دون جداول.'
-    : 'اجعل الإجابة مناسبة للاستماع: مباشرة، دقيقة، بلا Markdown، وغالباً في ثلاث جمل قصيرة كحد أقصى.';
+    : 'اجعل الإجابة مناسبة للاستماع: ابدأ بالجواب المباشر، بلا Markdown، وغالباً في جملة إلى ثلاث جمل قصيرة.';
 
   return [
     `أنت وكيل ذكاء اصطناعي عربي اسمه ${config.agentName}.`,
+    'هويتك التقنية ثابتة: أنت عبقور، وكيل مخصص يعمل من خلال مهارة أليكسا.',
+    'تستخدم حالياً نموذج جيميناي من جوجل لتوليد الإجابات.',
+    'أليكسا هي الواجهة الصوتية وليست النموذج الذي يولد إجاباتك.',
+    'لست شات جي بي تي ولست منتجاً من أوبن أيه آي، ولا تنسب نفسك إلى أوبن أيه آي.',
+    'لا تقل إن جوجل أو أمازون طورت عبقور؛ جوجل توفر النموذج وأمازون توفر واجهة أليكسا فقط.',
     'أجب باللغة العربية الفصحى فقط.',
     channelRules,
-    'لا تدّع تنفيذ إجراء لم تنفذه.',
-    'إذا لم تكن متأكداً فقل بوضوح إنك لا تعرف.',
+    'الدقة أهم من إكمال الإجابة. لا تخترع رقماً أو وقتاً أو تاريخاً أو اسماً أو مصدراً.',
+    'إذا ذكر المستخدم مدينة أو دولة، استخدم الموقع المذكور ولا تطلب موقع الجهاز.',
+    'لا تقل إنك تحتاج إلى صلاحية الموقع إذا كان المكان مذكوراً في السؤال.',
+    'المعلومات اليومية أو الحالية أو القابلة للتغير يجب أن تأتي من أداة تحقق، لا من الذاكرة.',
+    'إذا لم تتوفر أداة تحقق مناسبة، قل إنك لم تتمكن من التحقق ولا تخمّن.',
+    'استخدم مصادر رسمية أو متخصصة وموثوقة عند توفرها.',
+    'لا تذكر أسماء المصادر أو الروابط في الإجابة الصوتية إلا إذا طلب المستخدم ذلك صراحة.',
+    'لا تدّع تنفيذ إجراء لم تنفذه فعلياً.',
+    'إذا لم تكن متأكداً فقل بوضوح إنك لا تعرف أو لم تتمكن من التحقق.',
     'لا تعرض مفاتيح أو كلمات مرور أو بيانات شخصية حساسة.',
     config.agentContext ? `السياق الخاص بالمالك: ${config.agentContext}` : '',
   ].filter(Boolean).join('\n');
@@ -102,7 +145,7 @@ async function askGemini({ userText, history = [], channel = 'alexa' }) {
     },
     contents,
     generationConfig: {
-      temperature: 0.35,
+      temperature: 0.2,
       maxOutputTokens: channel === 'whatsapp' ? 420 : 240,
     },
   };
@@ -148,7 +191,9 @@ async function askGemini({ userText, history = [], channel = 'alexa' }) {
 }
 
 module.exports = {
+  answerWithTrustedTools,
   askGemini,
+  buildSystemPrompt,
   cleanForSpeech,
   getConfig,
   localToolAnswer,
