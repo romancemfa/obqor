@@ -4,6 +4,39 @@ const GEOCODING_ENDPOINT = 'https://geocoding-api.open-meteo.com/v1/search';
 const FORECAST_ENDPOINT = 'https://api.open-meteo.com/v1/forecast';
 
 /**
+ * مواقع موثوقة لا تحتاج إلى Geocoding في كل طلب.
+ *
+ * المدينة المنورة:
+ * GeoNames coordinates:
+ * latitude: 24.4686111
+ * longitude: 39.6141667
+ *
+ * التوقيت المحلي:
+ * Asia/Riyadh
+ */
+const MEDINA_LOCATION = Object.freeze({
+  query: 'Medina',
+
+  queries: [
+    'Medina',
+    'Madinah',
+    'Al Madinah',
+  ],
+
+  displayName: 'المدينة المنورة',
+
+  country: 'المملكة العربية السعودية',
+
+  countryCode: 'SA',
+
+  latitude: 24.4686111,
+
+  longitude: 39.6141667,
+
+  timezone: 'Asia/Riyadh',
+});
+
+/**
  * أسماء بديلة للمدن العربية.
  *
  * المفاتيح مكتوبة بعد تطبيق normalizeArabic:
@@ -17,23 +50,15 @@ const FORECAST_ENDPOINT = 'https://api.open-meteo.com/v1/forecast';
  * الاسم العربي الذي يقال للمستخدم.
  */
 const LOCATION_ALIASES = {
-  'المدينه المنوره': {
-    query: 'Medina',
-    countryCode: 'SA',
-    displayName: 'المدينة المنورة',
-  },
+  'المدينه المنوره': MEDINA_LOCATION,
 
-  'مدينه المنوره': {
-    query: 'Medina',
-    countryCode: 'SA',
-    displayName: 'المدينة المنورة',
-  },
+  'مدينه المنوره': MEDINA_LOCATION,
 
-  'المدينه': {
-    query: 'Medina',
-    countryCode: 'SA',
-    displayName: 'المدينة المنورة',
-  },
+  'المدينه': MEDINA_LOCATION,
+
+  'المدينة المنورة': MEDINA_LOCATION,
+
+  'مدينة المنورة': MEDINA_LOCATION,
 
   'مكه المكرمه': {
     query: 'Mecca',
@@ -306,16 +331,80 @@ async function geocodeLocation(location, config) {
   const normalizedLocation = normalizeArabic(originalLocation);
   const alias = LOCATION_ALIASES[normalizedLocation] || null;
 
+    /**
+   * إذا كانت الإحداثيات محفوظة في القاموس،
+   * نستخدمها مباشرة ولا نستدعي Geocoding API.
+   */
+  if (
+    alias
+    && Number.isFinite(Number(alias.latitude))
+    && Number.isFinite(Number(alias.longitude))
+  ) {
+    const resolvedPlace = {
+      name: String(
+        alias.displayName || originalLocation,
+      ).trim(),
+
+      country: String(
+        alias.country || '',
+      ).trim(),
+
+      countryCode: String(
+        alias.countryCode || '',
+      )
+        .trim()
+        .toUpperCase(),
+
+      latitude: Number(alias.latitude),
+
+      longitude: Number(alias.longitude),
+
+      timezone: String(
+        alias.timezone
+        || config.defaultTimeZone
+        || 'Asia/Riyadh',
+      ).trim(),
+    };
+
+    console.log(
+      'Location resolved from trusted local registry',
+      {
+        originalLocation,
+        normalizedLocation,
+        displayName: resolvedPlace.name,
+        countryCode: resolvedPlace.countryCode,
+        latitude: resolvedPlace.latitude,
+        longitude: resolvedPlace.longitude,
+        timezone: resolvedPlace.timezone,
+      },
+    );
+
+    return resolvedPlace;
+  }
+
   const configuredCountryCode = String(
     config.defaultCountryCode || '',
   )
     .trim()
     .toUpperCase();
 
+    /**
+   * نستخدم دولة الاسم البديل عند وجودها.
+   *
+   * نستخدم الدولة الافتراضية فقط عندما يكون الموقع
+   * هو الموقع الافتراضي نفسه.
+   *
+   * المدن الأخرى غير المسجلة تبحث عالمياً.
+   */
+  const isDefaultLocation =
+    normalizedLocation
+    === normalizeArabic(config.defaultLocation);
+
   const countryCode =
-    alias?.countryCode
+    String(alias?.countryCode || '').trim().toUpperCase()
     || (
-      /^[A-Z]{2}$/.test(configuredCountryCode)
+      isDefaultLocation
+      && /^[A-Z]{2}$/.test(configuredCountryCode)
         ? configuredCountryCode
         : ''
     );
@@ -326,6 +415,10 @@ async function geocodeLocation(location, config) {
    * في قواعد بيانات أسماء المواقع.
    */
   const searchNames = [];
+
+  if (Array.isArray(alias?.queries)) {
+    searchNames.push(...alias.queries);
+  }
 
   if (alias?.query) {
     searchNames.push(alias.query);
