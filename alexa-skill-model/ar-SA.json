@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "عبقور الذكي",
+      "invocationName": "حكيم رقمي",
       "intents": [
         {
           "name": "AskAgentIntent",
@@ -14,17 +14,254 @@
           "samples": [
             "اسأل {query}",
             "أجب عن {query}",
-            "اشرح لي {query}",
-            "أريد أن أعرف {query}",
+            "جاوبني عن {query}",
             "قل لي عن {query}",
-            "ما معنى {query}"
+            "خبرني عن {query}",
+            "اشرح لي {query}",
+            "وضح لي {query}",
+            "فسر لي {query}",
+            "لو سمحت أخبرني عن {query}"
           ]
         },
-        { "name": "AMAZON.CancelIntent", "samples": [] },
-        { "name": "AMAZON.HelpIntent", "samples": [] },
-        { "name": "AMAZON.StopIntent", "samples": [] },
-        { "name": "AMAZON.FallbackIntent", "samples": [] },
-        { "name": "AMAZON.NavigateHomeIntent", "samples": [] }
+        {
+          "name": "WhatQuestionIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "ما {query}",
+            "ماذا {query}",
+            "وش {query}",
+            "وشو {query}",
+            "شو {query}",
+            "إيش {query}",
+            "ايش {query}"
+          ]
+        },
+        {
+          "name": "HowQuestionIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "كيف {query}",
+            "شلون {query}"
+          ]
+        },
+        {
+          "name": "WhyQuestionIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "لماذا {query}",
+            "ليش {query}",
+            "ليه {query}"
+          ]
+        },
+        {
+          "name": "WhenQuestionIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "متى {query}"
+          ]
+        },
+        {
+          "name": "WhereQuestionIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "أين {query}",
+            "وين {query}",
+            "فين {query}"
+          ]
+        },
+        {
+          "name": "WhoQuestionIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "من {query}",
+            "مين {query}"
+          ]
+        },
+        {
+          "name": "HowMuchQuestionIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "كم {query}",
+            "قديش {query}",
+            "بكم {query}"
+          ]
+        },
+        {
+          "name": "YesNoQuestionIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "هل {query}"
+          ]
+        },
+        {
+          "name": "RequestIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "أريد {query}",
+            "اريد {query}",
+            "أبغى {query}",
+            "ابغى {query}",
+            "أبي {query}",
+            "ابي {query}",
+            "ودي {query}",
+            "بدي {query}"
+          ]
+        },
+        {
+          "name": "ImperativeQuestionIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "أعطني {query}",
+            "اعطني {query}",
+            "عطني {query}",
+            "علمني {query}",
+            "احكي لي عن {query}",
+            "حكيلي عن {query}"
+          ]
+        },
+        {
+          "name": "PossibilityQuestionIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "ممكن {query}",
+            "تقدر {query}",
+            "تستطيع {query}",
+            "بتقدر {query}",
+            "فيك {query}"
+          ]
+        },
+        {
+          "name": "DifferenceQuestionIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "الفرق بين {query}"
+          ]
+        },
+        {
+          "name": "MeaningQuestionIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "معنى {query}"
+          ]
+        },
+        {
+          "name": "ReasonQuestionIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "سبب {query}"
+          ]
+        },
+        {
+          "name": "EndConversationIntent",
+          "samples": [
+            "إنهاء",
+            "انهاء",
+            "إغلاق",
+            "اغلاق",
+            "أغلق المحادثة",
+            "اغلق المحادثة",
+            "أنهي المحادثة",
+            "انهي المحادثة",
+            "مع السلامة",
+            "إلى اللقاء",
+            "الى اللقاء",
+            "خلاص",
+            "خلص",
+            "خلاص انتهينا",
+            "بس كذا",
+            "يلا سلام"
+          ]
+        },
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        }
       ],
       "types": []
     }
