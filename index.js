@@ -32,7 +32,7 @@ app.get('/', (req, res) => {
 });
 
 /**
- * فحص صحة الخدمة.
+ * مسار فحص الصحة.
  */
 app.get('/health', (req, res) => {
   res.status(200).json({
@@ -48,127 +48,128 @@ app.get('/health', (req, res) => {
 });
 
 /**
- * إنشاء مهارة Alexa ومحول Express الرسمي.
+ * Custom Verifier للتحقق من أن الطلب يخص مهارة Alexa الحالية.
  *
- * true الأولى: التحقق من توقيع Alexa.
- * true الثانية: التحقق من Timestamp.
+ * محول Alexa يمرر جسم الطلب إلى verify كنص JSON خام.
+ */
+class AlexaSkillIdVerifier {
+  async verify(requestEnvelope) {
+    const expectedSkillId = String(
+      process.env.ALEXA_SKILL_ID || '',
+    ).trim();
+
+    if (!expectedSkillId) {
+      console.error(
+        'Alexa request rejected: ALEXA_SKILL_ID is not configured',
+      );
+
+      throw new Error(
+        'ALEXA_SKILL_ID is not configured',
+      );
+    }
+
+    if (
+      typeof requestEnvelope !== 'string'
+      || !requestEnvelope.trim()
+    ) {
+      console.error(
+        'Alexa request rejected: raw request body is missing',
+      );
+
+      throw new Error(
+        'Alexa raw request body is missing',
+      );
+    }
+
+    let envelope;
+
+    try {
+      envelope = JSON.parse(requestEnvelope);
+    } catch (error) {
+      console.error(
+        'Alexa request rejected: request body is not valid JSON',
+      );
+
+      throw new Error(
+        'Alexa request body is not valid JSON',
+      );
+    }
+
+    const actualSkillId =
+      envelope?.context?.System?.application?.applicationId
+      || envelope?.session?.application?.applicationId
+      || '';
+
+    if (!actualSkillId) {
+      console.error(
+        'Alexa request rejected: applicationId is missing',
+      );
+
+      throw new Error(
+        'Alexa applicationId is missing',
+      );
+    }
+
+    if (actualSkillId !== expectedSkillId) {
+      console.error(
+        'Alexa applicationId mismatch',
+        {
+          expectedSkillId,
+          actualSkillId,
+        },
+      );
+
+      throw new Error(
+        'Alexa applicationId mismatch',
+      );
+    }
+  }
+}
+
+/**
+ * إنشاء مهارة Alexa.
  */
 const alexaSkill = createAlexaSkill();
+
+/**
+ * إنشاء محول Alexa الرسمي.
+ *
+ * المعامل الثاني true:
+ * التحقق من توقيع Alexa.
+ *
+ * المعامل الثالث true:
+ * التحقق من توقيت الطلب.
+ *
+ * المعامل الرابع:
+ * Custom Verifiers.
+ */
 const alexaAdapter = new ExpressAdapter(
   alexaSkill,
   true,
   true,
+  [
+    new AlexaSkillIdVerifier(),
+  ],
 );
-
-const [
-  ensureRawBody,
-  alexaTextParser,
-  dispatchAlexa,
-] = alexaAdapter.getRequestHandlers();
-
-/**
- * التحقق من أن الطلب يخص مهارتنا تحديداً.
- *
- * بعد alexaTextParser تكون req.body كائن JavaScript جاهزاً،
- * لذلك لا نستخدم JSON.parse مرة أخرى.
- */
-function verifyAlexaSkillId(req, res, next) {
-  const expectedSkillId = String(
-    process.env.ALEXA_SKILL_ID || '',
-  ).trim();
-
-  if (!expectedSkillId) {
-    console.error(
-      'Alexa request rejected: ALEXA_SKILL_ID is not configured',
-    );
-
-    return res
-      .status(500)
-      .json({
-        error: 'ALEXA_SKILL_ID is not configured',
-      });
-  }
-
-  const envelope = req.body;
-
-  if (
-    !envelope
-    || typeof envelope !== 'object'
-    || Array.isArray(envelope)
-  ) {
-    console.error(
-      'Alexa request rejected: parsed request body is invalid',
-    );
-
-    return res
-      .status(400)
-      .json({
-        error: 'Invalid Alexa request body',
-      });
-  }
-
-  const actualSkillId =
-    envelope?.context?.System?.application?.applicationId
-    || envelope?.session?.application?.applicationId
-    || '';
-
-  if (!actualSkillId) {
-    console.error(
-      'Alexa request rejected: applicationId is missing',
-    );
-
-    return res
-      .status(400)
-      .json({
-        error: 'Alexa applicationId is missing',
-      });
-  }
-
-  if (actualSkillId !== expectedSkillId) {
-    console.error(
-      'Alexa applicationId mismatch',
-      {
-        expectedSkillId,
-        actualSkillId,
-      },
-    );
-
-    return res
-      .status(400)
-      .json({
-        error: 'Alexa applicationId mismatch',
-      });
-  }
-
-  return next();
-}
 
 /**
  * نقطة استقبال Alexa.
  *
- * ترتيب الوسطاء مهم:
- * 1. قراءة الجسم الخام.
- * 2. تحليل JSON بواسطة محول Alexa.
- * 3. التحقق من Skill ID.
- * 4. تشغيل المهارة.
+ * لا تضع express.json أو express.text أو bodyParser
+ * قبل هذا المسار؛ محول Alexa يعالج الجسم بنفسه.
  */
 app.post(
   '/alexa',
-  ensureRawBody,
-  alexaTextParser,
-  verifyAlexaSkillId,
-  dispatchAlexa,
+  alexaAdapter.getRequestHandlers(),
 );
 
 /**
- * المتصفح يرسل GET، بينما Alexa ترسل POST.
+ * المتصفح يرسل GET بينما Alexa ترسل POST.
  */
 app.all('/alexa', (req, res) => {
-  res
-    .status(405)
-    .json({
-      error: 'Alexa endpoint accepts POST only',
-    });
+  res.status(405).json({
+    error: 'Alexa endpoint accepts POST only',
+  });
 });
 
 /**
@@ -189,14 +190,12 @@ app.post(
 );
 
 /**
- * مسار غير موجود.
+ * المسارات غير الموجودة.
  */
 app.use((req, res) => {
-  res
-    .status(404)
-    .json({
-      error: 'Not found',
-    });
+  res.status(404).json({
+    error: 'Not found',
+  });
 });
 
 /**
@@ -212,16 +211,14 @@ app.use((error, req, res, next) => {
     return next(error);
   }
 
-  return res
-    .status(500)
-    .json({
-      error: 'Internal server error',
-    });
+  return res.status(500).json({
+    error: 'Internal server error',
+  });
 });
 
 /**
- * تشغيل محلي فقط.
- * Vercel تستخدم التطبيق المصدّر في نهاية الملف.
+ * التشغيل المحلي فقط.
+ * Vercel تستخدم التطبيق المصدّر.
  */
 if (require.main === module) {
   const port = Number(
