@@ -9,8 +9,12 @@ const {
 } = require('./src/whatsapp');
 
 const app = express();
+
 app.disable('x-powered-by');
 
+/**
+ * الصفحة الأساسية لفحص الخدمة.
+ */
 app.get('/', (req, res) => {
   res.status(200).json({
     service: 'Obqor AI Agent',
@@ -18,43 +22,136 @@ app.get('/', (req, res) => {
     alexaEndpoint: '/alexa',
     whatsappEndpoint: '/whatsapp',
     awsRequired: false,
+    alexaSkillIdConfigured: Boolean(
+      String(process.env.ALEXA_SKILL_ID || '').trim(),
+    ),
+    geminiApiKeyConfigured: Boolean(
+      String(process.env.GEMINI_API_KEY || '').trim(),
+    ),
   });
 });
 
+/**
+ * فحص صحة الخدمة.
+ */
 app.get('/health', (req, res) => {
-  res.status(200).json({ ok: true, timestamp: new Date().toISOString() });
+  res.status(200).json({
+    ok: true,
+    timestamp: new Date().toISOString(),
+    alexaSkillIdConfigured: Boolean(
+      String(process.env.ALEXA_SKILL_ID || '').trim(),
+    ),
+    geminiApiKeyConfigured: Boolean(
+      String(process.env.GEMINI_API_KEY || '').trim(),
+    ),
+  });
 });
 
-// لا تضع أي body parser قبل هذا المسار. المحول الرسمي يحتاج النص الخام
-// للتحقق من توقيع Alexa وتاريخ الطلب.
+/**
+ * إنشاء مهارة Alexa ومحول Express الرسمي.
+ *
+ * true الأولى: التحقق من توقيع Alexa.
+ * true الثانية: التحقق من Timestamp.
+ */
 const alexaSkill = createAlexaSkill();
-const alexaAdapter = new ExpressAdapter(alexaSkill, true, true);
-const [ensureRawBody, alexaTextParser, dispatchAlexa] = alexaAdapter.getRequestHandlers();
+const alexaAdapter = new ExpressAdapter(
+  alexaSkill,
+  true,
+  true,
+);
 
+const [
+  ensureRawBody,
+  alexaTextParser,
+  dispatchAlexa,
+] = alexaAdapter.getRequestHandlers();
+
+/**
+ * التحقق من أن الطلب يخص مهارتنا تحديداً.
+ *
+ * بعد alexaTextParser تكون req.body كائن JavaScript جاهزاً،
+ * لذلك لا نستخدم JSON.parse مرة أخرى.
+ */
 function verifyAlexaSkillId(req, res, next) {
-  const expectedSkillId = String(process.env.ALEXA_SKILL_ID || '').trim();
+  const expectedSkillId = String(
+    process.env.ALEXA_SKILL_ID || '',
+  ).trim();
+
   if (!expectedSkillId) {
-    res.status(500).send('ALEXA_SKILL_ID is not configured');
-    return;
+    console.error(
+      'Alexa request rejected: ALEXA_SKILL_ID is not configured',
+    );
+
+    return res
+      .status(500)
+      .json({
+        error: 'ALEXA_SKILL_ID is not configured',
+      });
   }
 
-  try {
-    const envelope = JSON.parse(req.body);
-    const actualSkillId = envelope?.context?.System?.application?.applicationId
-      || envelope?.session?.application?.applicationId
-      || '';
+  const envelope = req.body;
 
-    if (actualSkillId !== expectedSkillId) {
-      res.status(400).send('Alexa applicationId mismatch');
-      return;
-    }
+  if (
+    !envelope
+    || typeof envelope !== 'object'
+    || Array.isArray(envelope)
+  ) {
+    console.error(
+      'Alexa request rejected: parsed request body is invalid',
+    );
 
-    next();
-  } catch (error) {
-    res.status(400).send('Invalid Alexa request JSON');
+    return res
+      .status(400)
+      .json({
+        error: 'Invalid Alexa request body',
+      });
   }
+
+  const actualSkillId =
+    envelope?.context?.System?.application?.applicationId
+    || envelope?.session?.application?.applicationId
+    || '';
+
+  if (!actualSkillId) {
+    console.error(
+      'Alexa request rejected: applicationId is missing',
+    );
+
+    return res
+      .status(400)
+      .json({
+        error: 'Alexa applicationId is missing',
+      });
+  }
+
+  if (actualSkillId !== expectedSkillId) {
+    console.error(
+      'Alexa applicationId mismatch',
+      {
+        expectedSkillId,
+        actualSkillId,
+      },
+    );
+
+    return res
+      .status(400)
+      .json({
+        error: 'Alexa applicationId mismatch',
+      });
+  }
+
+  return next();
 }
 
+/**
+ * نقطة استقبال Alexa.
+ *
+ * ترتيب الوسطاء مهم:
+ * 1. قراءة الجسم الخام.
+ * 2. تحليل JSON بواسطة محول Alexa.
+ * 3. التحقق من Skill ID.
+ * 4. تشغيل المهارة.
+ */
 app.post(
   '/alexa',
   ensureRawBody,
@@ -63,32 +160,78 @@ app.post(
   dispatchAlexa,
 );
 
+/**
+ * المتصفح يرسل GET، بينما Alexa ترسل POST.
+ */
 app.all('/alexa', (req, res) => {
-  res.status(405).json({ error: 'Alexa endpoint accepts POST only' });
+  res
+    .status(405)
+    .json({
+      error: 'Alexa endpoint accepts POST only',
+    });
 });
 
-// WhatsApp يستخدم الجسم الخام أيضاً للتحقق من توقيع Meta.
-app.get('/whatsapp', whatsappVerificationHandler);
-app.post('/whatsapp', express.raw({ type: 'application/json', limit: '1mb' }), whatsappMessageHandler);
+/**
+ * WhatsApp مستقبلاً.
+ */
+app.get(
+  '/whatsapp',
+  whatsappVerificationHandler,
+);
 
+app.post(
+  '/whatsapp',
+  express.raw({
+    type: 'application/json',
+    limit: '1mb',
+  }),
+  whatsappMessageHandler,
+);
+
+/**
+ * مسار غير موجود.
+ */
 app.use((req, res) => {
-  res.status(404).json({ error: 'Not found' });
+  res
+    .status(404)
+    .json({
+      error: 'Not found',
+    });
 });
 
+/**
+ * معالج أخطاء Express.
+ */
 app.use((error, req, res, next) => {
-  console.error('Unhandled Express error:', error);
+  console.error(
+    'Unhandled Express error:',
+    error,
+  );
+
   if (res.headersSent) {
-    next(error);
-    return;
+    return next(error);
   }
-  res.status(500).json({ error: 'Internal server error' });
+
+  return res
+    .status(500)
+    .json({
+      error: 'Internal server error',
+    });
 });
 
-// Vercel يلتقط التطبيق المصدّر مباشرة. الاستماع محلي فقط.
+/**
+ * تشغيل محلي فقط.
+ * Vercel تستخدم التطبيق المصدّر في نهاية الملف.
+ */
 if (require.main === module) {
-  const port = Number(process.env.PORT || 3000);
+  const port = Number(
+    process.env.PORT || 3000,
+  );
+
   app.listen(port, () => {
-    console.log(`Obqor AI Agent listening on http://localhost:${port}`);
+    console.log(
+      `Obqor AI Agent listening on http://localhost:${port}`,
+    );
   });
 }
 
