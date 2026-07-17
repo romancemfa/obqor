@@ -7,7 +7,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "node index.js",
-    "check": "node --check index.js && node --check src/agent.js && node --check src/alexa-skill.js && node --check src/whatsapp.js",
+    "check": "node --check index.js && node --check src/agent.js && node --check src/trusted-tools.js && node --check src/alexa-skill.js && node --check src/whatsapp.js",
     "test": "node tests/smoke-test.js"
   },
   "dependencies": {
